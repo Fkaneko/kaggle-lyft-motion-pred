@@ -166,7 +166,7 @@ def run_prediction(model: pl.LightningModule, data_loader: DataLoader) -> tuple:
     return timestamps, track_ids, coords, confs
 
 
-def main(cfg: dict, args: argparse.ArgumentParser) -> None:
+def main(cfg: dict, args: argparse.Namespace) -> None:
     # set random seeds
     SEED = 42
     os.environ["PYTHONHASHSEED"] = str(SEED)
