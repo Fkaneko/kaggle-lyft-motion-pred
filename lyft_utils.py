@@ -63,7 +63,8 @@ def print_argparse_arguments(p, bar: int = 50) -> None:
     for i, j in args:
         if isinstance(j, list):
             print("{0}[{1}]:".format(i, len(j)))
-            [print("\t{}".format(k)) for k in j]
+            for k in j:
+                print("\t{}".format(k))
         else:
             print("{0:25}:{1}".format(i, j))
     print("-" * bar)
