@@ -1,3 +1,5 @@
+from typing import Union
+
 import timm
 import torch
 import torch.nn as nn
@@ -8,9 +10,10 @@ BACKBONE_OUT = {
     "efficientnet_b3": 1536,
     "seresnext26d_32x4d": 2048,
 }
+ModelTypes = Union[timm.models.efficientnet.EfficientNet, timm.models.resnet.ResNet]
 
 
-def extend_input_channel(model: nn.Module, channel_scale: int = 2) -> nn.Module:
+def extend_input_channel(model: ModelTypes, channel_scale: int = 2) -> nn.Module:
     """
     Extned 1st conv layer weight of LyftMpredModel pretrained weight
     for longger history input.
@@ -39,7 +42,7 @@ def extend_input_channel(model: nn.Module, channel_scale: int = 2) -> nn.Module:
 
 
 def extend_1st_convw_ch(
-    backbone: nn.Module,
+    backbone: ModelTypes,
     backbone_name: str,
     num_in_channels: int,
 ) -> nn.Module:

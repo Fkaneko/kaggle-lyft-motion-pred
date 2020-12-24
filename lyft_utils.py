@@ -1,3 +1,4 @@
+import argparse
 from typing import List
 
 import numpy as np
@@ -47,7 +48,7 @@ def downsample_agents(
     return agents_list
 
 
-def print_argparse_arguments(p, bar: int = 50) -> None:
+def print_argparse_arguments(p: argparse.Namespace, bar: int = 50) -> None:
 
     """
     from https://qiita.com/ka10ryu1/items/0b24e39799b2457cba62
@@ -63,7 +64,8 @@ def print_argparse_arguments(p, bar: int = 50) -> None:
     for i, j in args:
         if isinstance(j, list):
             print("{0}[{1}]:".format(i, len(j)))
-            [print("\t{}".format(k)) for k in j]
+            for k in j:
+                print("\t{}".format(k))
         else:
             print("{0:25}:{1}".format(i, j))
     print("-" * bar)

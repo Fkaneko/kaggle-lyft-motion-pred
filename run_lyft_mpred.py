@@ -42,9 +42,10 @@ class LyftMpredModel(pl.LightningModule):
     def __init__(
         self,
         cfg: dict,
+        num_modes: int = 3,
+        ba_size: int = 128,
         lr: float = 3.0e-4,
         backbone_name: str = "efficientnet_b1",
-        ba_size: int = 128,
         epochs: int = 1,
         total_steps: int = 100,
         data_size: int = ALL_DATA_SIZE,
@@ -54,6 +55,7 @@ class LyftMpredModel(pl.LightningModule):
         self.save_hyperparameters(
             "lr",
             "backbone_name",
+            "num_modes",
             "ba_size",
             "epochs",
             "optim_name",
@@ -61,7 +63,7 @@ class LyftMpredModel(pl.LightningModule):
             "total_steps",
         )
         self.model = lyft_models.LyftMultiModel(
-            cfg, num_modes=3, backbone_name=backbone_name
+            cfg, num_modes=num_modes, backbone_name=backbone_name
         )
 
     def forward(self, x):
@@ -166,7 +168,7 @@ def run_prediction(model: pl.LightningModule, data_loader: DataLoader) -> tuple:
     return timestamps, track_ids, coords, confs
 
 
-def main(cfg: dict, args: argparse.ArgumentParser) -> None:
+def main(cfg: dict, args: argparse.Namespace) -> None:
     # set random seeds
     SEED = 42
     os.environ["PYTHONHASHSEED"] = str(SEED)
@@ -306,6 +308,7 @@ def main(cfg: dict, args: argparse.ArgumentParser) -> None:
             cfg,
             lr=args.lr,
             backbone_name=args.backbone_name,
+            num_modes=args.num_modes,
             optim_name=args.optim_name,
             ba_size=args.batch_size,
             epochs=args.epochs,
@@ -360,6 +363,12 @@ if __name__ == "__main__":
         choices=["adam", "sgd"],
         default="sgd",
         help="optimizer name",
+    )
+    parser.add_argument(
+        "--num_modes",
+        type=int,
+        default=3,
+        help="number of the modes on each prediction",
     )
     parser.add_argument("--lr", default=7.0e-4, type=float, help="learning rate")
     parser.add_argument("--batch_size", type=int, default=220, help="batch size")
