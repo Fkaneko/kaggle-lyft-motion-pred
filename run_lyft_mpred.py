@@ -63,7 +63,7 @@ class LyftMpredModel(pl.LightningModule):
             "total_steps",
         )
         self.model = lyft_models.LyftMultiModel(
-            cfg, num_modes=self.hparam.num_modes, backbone_name=backbone_name
+            cfg, num_modes=num_modes, backbone_name=backbone_name
         )
 
     def forward(self, x):
@@ -308,6 +308,7 @@ def main(cfg: dict, args: argparse.Namespace) -> None:
             cfg,
             lr=args.lr,
             backbone_name=args.backbone_name,
+            num_modes=args.num_modes,
             optim_name=args.optim_name,
             ba_size=args.batch_size,
             epochs=args.epochs,
