@@ -4,7 +4,6 @@ format_version: 4
 ###################
 ## Model options
 model_params:
-  model_architecture: "resnet50"
 
   # history_num_frames: 10
   history_num_frames: 2
@@ -49,18 +48,15 @@ raster_params:
 train_data_loader:
   key: "scenes/train_full.zarr"
   shuffle: True
-  # num_workers: 16
   num_workers: 4
 
 val_data_loader:
   key: 'scenes/validate.zarr'
   shuffle: False
-  # num_workers: 16
   num_workers: 4
 
 val_ch_data_loader:
   key: 'scenes/validate_chopped_100/validate.zarr'
-  # key: 'scenes/validate.zarr'
   shuffle: False
   num_workers: 4
 
@@ -69,10 +65,3 @@ test_data_loader:
   shuffle: False
   num_workers: 4
 
-###################
-## Train params
-train_params:
-  checkpoint_every_n_steps: 10000
-  # max_num_steps: 5
-  max_num_steps: 10000
-  eval_every_n_steps: 10000
