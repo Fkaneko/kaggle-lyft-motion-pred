@@ -419,6 +419,8 @@ much faster than using all data, but it will get larger loss",
         print("\t ---- DEBUG RUN")
         cfg["train_data_loader"]["key"] = "scenes/sample.zarr"
         cfg["val_data_loader"]["key"] = "scenes/sample.zarr"
+        VAL_INTERVAL_SAMPLES = 5000
+        args.batch_size = 16
     else:
         DEBUG = False
         print("\t ---- NORMAL RUN")
