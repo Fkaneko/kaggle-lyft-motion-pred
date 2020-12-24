@@ -77,7 +77,12 @@ class LyftMpredModel(pl.LightningModule):
         outputs = self.model(inputs)
 
         outputs, confidences = outputs
-        loss = self.criterion(outputs, targets, target_availabilities, confidences)
+        loss = lyft_loss.pytorch_neg_multi_log_likelihood_batch(
+            targets,
+            outputs,
+            confidences.squeeze(),
+            target_availabilities.squeeze(),
+        )
         self.log(
             "train_epoch_loss",
             loss,
@@ -95,7 +100,12 @@ class LyftMpredModel(pl.LightningModule):
 
         outputs = self.model(inputs)
         outputs, confidences = outputs
-        loss = self.criterion(outputs, targets, target_availabilities, confidences)
+        loss = lyft_loss.pytorch_neg_multi_log_likelihood_batch(
+            targets,
+            outputs,
+            confidences.squeeze(),
+            target_availabilities.squeeze(),
+        )
         self.log("val_loss", loss)
         return loss
 
@@ -115,15 +125,6 @@ class LyftMpredModel(pl.LightningModule):
             optimizer, max_lr=self.hparams.lr, total_steps=self.hparams.total_steps
         )
         return [optimizer], [scheduler]
-
-    def criterion(self, outputs, targets, target_availabilities, confidences):
-        loss = lyft_loss.pytorch_neg_multi_log_likelihood_batch(
-            targets,
-            outputs,
-            confidences.squeeze(),
-            target_availabilities.squeeze(),
-        )
-        return loss
 
 
 def run_prediction(model: pl.LightningModule, data_loader: DataLoader) -> tuple:
