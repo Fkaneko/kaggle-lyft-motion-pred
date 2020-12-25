@@ -35,7 +35,7 @@ CFG_PATH = "./agent_motion_config.yaml"
 MIN_FRAME_HISTORY = 0
 # minimum number of frames an agents must have in the future to be picked
 MIN_FRAME_FUTURE = 10
-VAL_SELECTED_FRAME = 99
+VAL_SELECTED_FRAME = (99,)
 
 
 class LyftMpredModel(pl.LightningModule):
@@ -289,7 +289,7 @@ def main(cfg: dict, args: argparse.Namespace) -> None:
         # downsampling the validation dataset same as test dataset or
         # l5kit.evaluation.create_chopped_dataset
         val_agents_list = lyft_utils.downsample_agents(
-            val_zarr, val_dataset, selected_frames=[VAL_SELECTED_FRAME]
+            val_zarr, val_dataset, selected_frames=VAL_SELECTED_FRAME
         )
         val_dataset = torch.utils.data.Subset(val_dataset, val_agents_list)
         val_dataloader = DataLoader(
