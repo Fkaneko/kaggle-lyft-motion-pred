@@ -64,4 +64,3 @@ test_data_loader:
   key: 'scenes/test.zarr'
   shuffle: False
   num_workers: 4
-

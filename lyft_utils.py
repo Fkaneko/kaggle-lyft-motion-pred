@@ -1,17 +1,17 @@
 import argparse
-from typing import List
+from typing import Tuple
 
 import numpy as np
 from l5kit.data import ChunkedDataset
 from l5kit.dataset import AgentDataset
 
-TRAIN_DSAMPLE_FRAMES = [49, 99, 149, 199]
+TRAIN_DSAMPLE_FRAMES = (49, 99, 149, 199)
 
 
 def downsample_agents(
     zarr_dataset: ChunkedDataset,
     agent_dataset: AgentDataset,
-    selected_frames: List[int] = [101],
+    selected_frames: Tuple[int, ...] = (101,),
 ) -> list:
     """
     Extract agents within selected frames from each scene.
@@ -69,4 +69,3 @@ def print_argparse_arguments(p: argparse.Namespace, bar: int = 50) -> None:
         else:
             print("{0:25}:{1}".format(i, j))
     print("-" * bar)
-    return None

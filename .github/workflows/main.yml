@@ -1,4 +1,4 @@
-name: lint-format
+name: lint
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest isort black mypy
+        pip install flake8 pytest isort black==20.8b1 mypy
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Run black
       run: black --check .

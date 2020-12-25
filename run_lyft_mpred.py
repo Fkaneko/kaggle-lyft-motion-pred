@@ -35,7 +35,7 @@ CFG_PATH = "./agent_motion_config.yaml"
 MIN_FRAME_HISTORY = 0
 # minimum number of frames an agents must have in the future to be picked
 MIN_FRAME_FUTURE = 10
-VAL_SELECTED_FRAME = 99
+VAL_SELECTED_FRAME = (99,)
 
 
 class LyftMpredModel(pl.LightningModule):
@@ -77,7 +77,12 @@ class LyftMpredModel(pl.LightningModule):
         outputs = self.model(inputs)
 
         outputs, confidences = outputs
-        loss = self.criterion(outputs, targets, target_availabilities, confidences)
+        loss = lyft_loss.pytorch_neg_multi_log_likelihood_batch(
+            targets,
+            outputs,
+            confidences.squeeze(),
+            target_availabilities.squeeze(),
+        )
         self.log(
             "train_epoch_loss",
             loss,
@@ -95,7 +100,12 @@ class LyftMpredModel(pl.LightningModule):
 
         outputs = self.model(inputs)
         outputs, confidences = outputs
-        loss = self.criterion(outputs, targets, target_availabilities, confidences)
+        loss = lyft_loss.pytorch_neg_multi_log_likelihood_batch(
+            targets,
+            outputs,
+            confidences.squeeze(),
+            target_availabilities.squeeze(),
+        )
         self.log("val_loss", loss)
         return loss
 
@@ -115,15 +125,6 @@ class LyftMpredModel(pl.LightningModule):
             optimizer, max_lr=self.hparams.lr, total_steps=self.hparams.total_steps
         )
         return [optimizer], [scheduler]
-
-    def criterion(self, outputs, targets, target_availabilities, confidences):
-        loss = lyft_loss.pytorch_neg_multi_log_likelihood_batch(
-            targets,
-            outputs,
-            confidences.squeeze(),
-            target_availabilities.squeeze(),
-        )
-        return loss
 
 
 def run_prediction(model: pl.LightningModule, data_loader: DataLoader) -> tuple:
@@ -288,7 +289,7 @@ def main(cfg: dict, args: argparse.Namespace) -> None:
         # downsampling the validation dataset same as test dataset or
         # l5kit.evaluation.create_chopped_dataset
         val_agents_list = lyft_utils.downsample_agents(
-            val_zarr, val_dataset, selected_frames=[VAL_SELECTED_FRAME]
+            val_zarr, val_dataset, selected_frames=VAL_SELECTED_FRAME
         )
         val_dataset = torch.utils.data.Subset(val_dataset, val_agents_list)
         val_dataloader = DataLoader(
@@ -418,6 +419,8 @@ much faster than using all data, but it will get larger loss",
         print("\t ---- DEBUG RUN")
         cfg["train_data_loader"]["key"] = "scenes/sample.zarr"
         cfg["val_data_loader"]["key"] = "scenes/sample.zarr"
+        VAL_INTERVAL_SAMPLES = 5000
+        args.batch_size = 16
     else:
         DEBUG = False
         print("\t ---- NORMAL RUN")
