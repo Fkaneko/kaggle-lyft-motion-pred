@@ -1,5 +1,5 @@
 
-![lint](https://github.com/Fkaneko/kaggle-lyft-motion-pred/workflows/lint/badge.svg)
+[![lint](https://github.com/Fkaneko/kaggle-lyft-motion-pred/workflows/lint/badge.svg)](https://github.com/Fkaneko/kaggle-lyft-motion-pred/actions?query=workflow%3Alint)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![deepcode](https://www.deepcode.ai/api/gh/badge?key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwbGF0Zm9ybTEiOiJnaCIsIm93bmVyMSI6IkZrYW5la28iLCJyZXBvMSI6ImthZ2dsZS1seWZ0LW1vdGlvbi1wcmVkIiwiaW5jbHVkZUxpbnQiOmZhbHNlLCJhdXRob3JJZCI6MjYyMDUsImlhdCI6MTYwODg1NjM2OX0.WgbA_r9hgJ_XCI9shahSP2x1N8fjFb860PQv3fIW7io)](https://www.deepcode.ai/app/gh/Fkaneko/kaggle-lyft-motion-pred/_/dashboard?utm_content=gh%2FFkaneko%2Fkaggle-lyft-motion-pred)
