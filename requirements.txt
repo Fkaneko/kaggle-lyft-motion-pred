@@ -1,6 +1,6 @@
 l5kit==1.1.0
 matplotlib==3.3.3
-pytorch-lightning==1.1.1
+pytorch-lightning>=1.0.6
 timm==0.3.2
-torch==1.7.1
-torchvision==0.8.2
+torch>=1.6
+torchvision>=0.7

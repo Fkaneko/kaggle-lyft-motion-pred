@@ -1,5 +1,5 @@
 
-![lint](https://github.com/Fkaneko/kaggle-lyft-motion-pred/workflows/lint/badge.svg)
+[![lint](https://github.com/Fkaneko/kaggle-lyft-motion-pred/workflows/lint/badge.svg)](https://github.com/Fkaneko/kaggle-lyft-motion-pred/actions?query=workflow%3Alint)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![deepcode](https://www.deepcode.ai/api/gh/badge?key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwbGF0Zm9ybTEiOiJnaCIsIm93bmVyMSI6IkZrYW5la28iLCJyZXBvMSI6ImthZ2dsZS1seWZ0LW1vdGlvbi1wcmVkIiwiaW5jbHVkZUxpbnQiOmZhbHNlLCJhdXRob3JJZCI6MjYyMDUsImlhdCI6MTYwODg1NjM2OX0.WgbA_r9hgJ_XCI9shahSP2x1N8fjFb860PQv3fIW7io)](https://www.deepcode.ai/app/gh/Fkaneko/kaggle-lyft-motion-pred/_/dashboard?utm_content=gh%2FFkaneko%2Fkaggle-lyft-motion-pred)
@@ -92,19 +92,27 @@ is differential.
 * Use all train data, in total 198474478 agents. It's really huge but
 the loss continuously decrease during training.
 
-Actually I got the following result.  The history_frames was 10 at the baseline so if you can use 10 instead of 2
+Actually I got the following result. The history_frames was 10 at the baseline so if you can use 10 instead of 2
 you may get better result than top-10 score, 11.283 with this single model.
+You can check [11.377 result with my full test pipeline and trained weight at kaggle notebook](https://www.kaggle.com/sai11fkaneko/lyft-late-submission-study).
 
 
 | model      | backbone    | scenes | iteration x batch_size | loss        | history\_frames                  | MIN_FRAME_HISTORY / FUTURE | test score |
 | -          | -           | -      | -                      | -           | -                                | -                          | -          |
 | baseline   | resnet50    | 11314  | 100k x 64              | single mode | 10                               | 10/1                       | 104.195    |
-| this study | seresnext26 | 134622 | 451k x 440             | multi-modal | 2 (10->2 due to time constraint) | 0/10                       | 11.378     |
+| this study | seresnext26 | 134622 | 451k x 440             | multi-modal | 2 (10->2 due to time constraint) | 0/10                       | 11.377     |
 
 **[Note]** The backbone difference is not a matter, within top-10 solution a single resnet18 reaches score < 10.0.
 But smaller model tends to be better for this task.
 
-### Reference
+## License
+#### Code
+Apache 2.0
+
+#### Dataset
+Please check, https://self-driving.lyft.com/level5/prediction/
+
+## Reference
 <!-- ![CI testing](https://github.com/PyTorchLightning/deep-learning-project-template/workflows/CI%20testing/badge.svg?branch=master&event=push) -->
 * [Github templete from PytorchLighting](https://github.com/PyTorchLightning/deep-learning-project-template).
 * [Nine simple steps for better-looking python code](https://towardsdatascience.com/nine-simple-steps-for-better-looking-python-code-87e5d9d3b1cf).
