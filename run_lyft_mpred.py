@@ -5,6 +5,7 @@ import argparse
 import os
 import random
 import sys
+from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,7 +20,6 @@ from l5kit.geometry import transform_points
 from l5kit.rasterization import build_rasterizer
 from l5kit.visualization import TARGET_POINTS_COLOR, draw_trajectory
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 import lyft_loss
 import lyft_models
@@ -29,16 +29,153 @@ ALL_DATA_SIZE = 198474478
 VAL_INTERVAL_SAMPLES = 250000
 CFG_PATH = "./agent_motion_config.yaml"
 
-# leaderborad test dataset configuration for agents, same as
-# l5kit.evaluation.create_chopped_dataset
+# for using the same sampling as test dataset agents,
+# these two FRAME settings are requried.
 # minimum number of frames an agents must have in the past to be picked
 MIN_FRAME_HISTORY = 0
 # minimum number of frames an agents must have in the future to be picked
 MIN_FRAME_FUTURE = 10
 VAL_SELECTED_FRAME = (99,)
 
+# output path for test mode
+CSV_PATH = "./submission.csv"
 
-class LyftMpredModel(pl.LightningModule):
+
+class LyftMpredDatamodule(pl.LightningDataModule):
+    def __init__(
+        self,
+        l5kit_data_folder: str,
+        cfg: dict,
+        batch_size: int = 440,
+        num_workers: int = 16,
+        downsample_train: bool = False,
+        is_test: bool = False,
+        is_debug: bool = False,
+    ) -> None:
+        super().__init__()
+        os.environ["L5KIT_DATA_FOLDER"] = l5kit_data_folder
+        self.cfg = cfg
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.downsample_train = downsample_train
+        self.is_test = is_test
+        self.is_debug = is_debug
+
+    def prepare_data(self):
+        # called only on 1 GPU
+        self.dm = LocalDataManager(None)
+        self.rasterizer = build_rasterizer(cfg, self.dm)
+
+    def setup(self):
+        # called on every GPU
+        if self.is_test:
+            print("test mode setup")
+            self.test_path, test_zarr, self.test_dataset = self.load_zarr_dataset(
+                loader_name="test_data_loader"
+            )
+        else:
+            print("train mode setup")
+            self.train_path, train_zarr, self.train_dataset = self.load_zarr_dataset(
+                loader_name="train_data_loader"
+            )
+            self.val_path, val_zarr, self.val_dataset = self.load_zarr_dataset(
+                loader_name="val_data_loader"
+            )
+            self.plot_dataset(self.train_dataset)
+
+            if self.downsample_train:
+                print(
+                    "downsampling agents, using only {} frames from each scene".format(
+                        len(lyft_utils.TRAIN_DSAMPLE_FRAMES)
+                    )
+                )
+                train_agents_list = lyft_utils.downsample_agents(
+                    train_zarr,
+                    self.train_dataset,
+                    selected_frames=lyft_utils.TRAIN_DSAMPLE_FRAMES,
+                )
+                self.train_dataset = torch.utils.data.Subset(
+                    self.train_dataset, train_agents_list
+                )
+            # downsampling the validation dataset same as test dataset or
+            # l5kit.evaluation.create_chopped_dataset
+            val_agents_list = lyft_utils.downsample_agents(
+                val_zarr, self.val_dataset, selected_frames=VAL_SELECTED_FRAME
+            )
+            self.val_dataset = torch.utils.data.Subset(
+                self.val_dataset, val_agents_list
+            )
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.train_dataset,
+            shuffle=True,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.val_dataset,
+            shuffle=False,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+        )
+
+    def test_dataloader(self):
+        return DataLoader(
+            self.test_dataset,
+            shuffle=False,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+        )
+
+    def load_zarr_dataset(
+        self, loader_name: str = "train_data_loder"
+    ) -> Tuple[str, ChunkedDataset, AgentDataset]:
+
+        zarr_path = self.dm.require(self.cfg[loader_name]["key"])
+        print("load zarr data:", zarr_path)
+        zarr_dataset = ChunkedDataset(zarr_path).open()
+        if loader_name == "test_data_loader":
+            mask_path = os.path.join(os.path.dirname(zarr_path), "mask.npz")
+            agents_mask = np.load(mask_path)["arr_0"]
+            agent_dataset = AgentDataset(
+                self.cfg, zarr_dataset, self.rasterizer, agents_mask=agents_mask
+            )
+        else:
+            agent_dataset = AgentDataset(
+                self.cfg,
+                zarr_dataset,
+                self.rasterizer,
+                min_frame_history=MIN_FRAME_HISTORY,
+                min_frame_future=MIN_FRAME_FUTURE,
+            )
+        print(zarr_dataset)
+        return zarr_path, zarr_dataset, agent_dataset
+
+    def plot_dataset(self, agent_dataset: AgentDataset, plot_num: int = 10) -> None:
+        print("Ploting dataset")
+        ind = np.random.randint(0, len(agent_dataset), size=plot_num)
+        for i in range(plot_num):
+            data = agent_dataset[ind[i]]
+            im = data["image"].transpose(1, 2, 0)
+            im = agent_dataset.rasterizer.to_rgb(im)
+            target_positions_pixels = transform_points(
+                data["target_positions"], data["raster_from_agent"]
+            )
+            draw_trajectory(
+                im,
+                target_positions_pixels,
+                TARGET_POINTS_COLOR,
+                yaws=data["target_yaws"],
+            )
+            plt.imshow(im[::-1])
+            if self.is_debug:
+                plt.show()
+
+
+class LitModel(pl.LightningModule):
     def __init__(
         self,
         cfg: dict,
@@ -65,6 +202,7 @@ class LyftMpredModel(pl.LightningModule):
         self.model = lyft_models.LyftMultiModel(
             cfg, num_modes=num_modes, backbone_name=backbone_name
         )
+        self.test_keys = ("world_from_agent", "centroid", "timestamp", "track_id")
 
     def forward(self, x):
         x = self.model(x)
@@ -74,9 +212,8 @@ class LyftMpredModel(pl.LightningModule):
         inputs = batch["image"]
         target_availabilities = batch["target_availabilities"].unsqueeze(-1)
         targets = batch["target_positions"]
-        outputs = self.model(inputs)
 
-        outputs, confidences = outputs
+        outputs, confidences = self.model(inputs)
         loss = lyft_loss.pytorch_neg_multi_log_likelihood_batch(
             targets,
             outputs,
@@ -98,8 +235,7 @@ class LyftMpredModel(pl.LightningModule):
         target_availabilities = batch["target_availabilities"].unsqueeze(-1)
         targets = batch["target_positions"]
 
-        outputs = self.model(inputs)
-        outputs, confidences = outputs
+        outputs, confidences = self.model(inputs)
         loss = lyft_loss.pytorch_neg_multi_log_likelihood_batch(
             targets,
             outputs,
@@ -108,6 +244,54 @@ class LyftMpredModel(pl.LightningModule):
         )
         self.log("val_loss", loss)
         return loss
+
+    def test_step(self, batch, batch_idx):
+        inputs = batch["image"]
+        outputs, confidences = self.model(inputs)
+        test_batch = {key_: batch[key_] for key_ in self.test_keys}
+
+        return outputs, confidences, test_batch
+
+    def test_epoch_end(self, outputs):
+        """from https://www.kaggle.com/pestipeti/pytorch-baseline-inference"""
+        pred_coords_list = []
+        confidences_list = []
+        timestamps_list = []
+        track_id_list = []
+
+        # convert into world coordinates and compute offsets
+        for outputs, confidences, batch in outputs:
+            outputs = outputs.cpu().numpy()
+
+            world_from_agents = batch["world_from_agent"].cpu().numpy()
+            centroids = batch["centroid"].cpu().numpy()
+            for idx in range(len(outputs)):
+                for mode in range(3):
+                    outputs[idx, mode, :, :] = (
+                        transform_points(
+                            outputs[idx, mode, :, :], world_from_agents[idx]
+                        )
+                        - centroids[idx][:2]
+                    )
+            pred_coords_list.append(outputs)
+
+            confidences_list.append(confidences)
+            timestamps_list.append(batch["timestamp"])
+            track_id_list.append(batch["track_id"])
+
+        coords = np.concatenate(pred_coords_list)
+        confs = torch.cat(confidences_list).cpu().numpy()
+        track_ids = torch.cat(track_id_list).cpu().numpy()
+        timestamps = torch.cat(timestamps_list).cpu().numpy()
+
+        write_pred_csv(
+            CSV_PATH,
+            timestamps=timestamps,
+            track_ids=track_ids,
+            coords=coords,
+            confs=confs,
+        )
+        print(f"Saved to {CSV_PATH}")
 
     def configure_optimizers(self):
         if self.hparams.optim_name == "sgd":
@@ -127,48 +311,6 @@ class LyftMpredModel(pl.LightningModule):
         return [optimizer], [scheduler]
 
 
-def run_prediction(model: pl.LightningModule, data_loader: DataLoader) -> tuple:
-    """from https://www.kaggle.com/pestipeti/pytorch-baseline-inference"""
-    DEVICE = torch.device("cuda")
-    model.to(DEVICE)
-    model.eval()
-    model.freeze()
-
-    pred_coords_list = []
-    confidences_list = []
-    timestamps_list = []
-    track_id_list = []
-
-    with torch.no_grad():
-        dataiter = tqdm(data_loader)
-        for data in dataiter:
-            image = data["image"].to(DEVICE)
-            preds, confidences = model(image)
-
-            # fix for the new environment
-            preds = preds.cpu().numpy()
-            world_from_agents = data["world_from_agent"].numpy()
-            centroids = data["centroid"].numpy()
-
-            # convert into world coordinates and compute offsets
-            for idx in range(len(preds)):
-                for mode in range(3):
-                    preds[idx, mode, :, :] = (
-                        transform_points(preds[idx, mode, :, :], world_from_agents[idx])
-                        - centroids[idx][:2]
-                    )
-
-            pred_coords_list.append(preds)
-            confidences_list.append(confidences.cpu().numpy().copy())
-            timestamps_list.append(data["timestamp"].numpy().copy())
-            track_id_list.append(data["track_id"].numpy().copy())
-    timestamps = np.concatenate(timestamps_list)
-    track_ids = np.concatenate(track_id_list)
-    coords = np.concatenate(pred_coords_list)
-    confs = np.concatenate(confidences_list)
-    return timestamps, track_ids, coords, confs
-
-
 def main(cfg: dict, args: argparse.Namespace) -> None:
     # set random seeds
     SEED = 42
@@ -181,131 +323,47 @@ def main(cfg: dict, args: argparse.Namespace) -> None:
     os.environ["CUDA_VISIBLE_DEVICES"] = args.visible_gpus
 
     # ===== Configure LYFT dataset
-    os.environ["L5KIT_DATA_FOLDER"] = args.l5kit_data_folder
-    dm = LocalDataManager(None)
-    rasterizer = build_rasterizer(cfg, dm)
+    # mypy error due to pl.DataModule.transfer_batch_to_device
+    mpred_dm = LyftMpredDatamodule(  # type: ignore[abstract]
+        args.l5kit_data_folder,
+        cfg,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        downsample_train=args.downsample_train,
+        is_test=args.is_test,
+        is_debug=args.is_debug,
+    )
+    mpred_dm.prepare_data()
+    mpred_dm.setup()
 
     if args.is_test:
-        test_cfg = cfg["test_data_loader"]
-        test_zarr_path = dm.require(test_cfg["key"])
-        print("test path", test_zarr_path)
-        test_mask_path = os.path.join(os.path.dirname(test_zarr_path), "mask.npz")
-        test_gt_path = os.path.join(os.path.dirname(test_zarr_path), "gt.csv")
-
-        test_zarr = ChunkedDataset(test_zarr_path).open()
-        test_mask = np.load(test_mask_path)["arr_0"]
-
-        # ===== INIT DATASET AND LOAD MASK
-        test_dataset = AgentDataset(cfg, test_zarr, rasterizer, agents_mask=test_mask)
-        test_dataloader = DataLoader(
-            test_dataset,
-            shuffle=test_cfg["shuffle"],
-            batch_size=args.batch_size,
-            num_workers=args.num_workers,
-        )
-        print(test_dataset)
-
+        print("\t\t ==== TEST MODE ====")
         print("load from: ", args.ckpt_path)
-        model = LyftMpredModel.load_from_checkpoint(args.ckpt_path, cfg=cfg)
+        model = LitModel.load_from_checkpoint(args.ckpt_path, cfg=cfg)
+        trainer = pl.Trainer(gpus=len(args.visible_gpus.split(",")))
+        trainer.test(model, datamodule=mpred_dm)
 
-        # --- Inference ---
-        timestamps, track_ids, coords, confs = run_prediction(model, test_dataloader)
-        csv_path = "submission.csv"
-        write_pred_csv(
-            csv_path,
-            timestamps=timestamps,
-            track_ids=track_ids,
-            coords=coords,
-            confs=confs,
-        )
-        print(f"Saved to {csv_path}")
+        test_gt_path = os.path.join(os.path.dirname(mpred_dm.test_path), "gt.csv")
         if os.path.exists(test_gt_path):
+            print("test mode with validation chopped dataset, and check the metrics")
+            print("validation ground truth path: ", test_gt_path)
             metrics = compute_metrics_csv(
-                test_gt_path, csv_path, [neg_multi_log_likelihood, time_displace]
+                test_gt_path, CSV_PATH, [neg_multi_log_likelihood, time_displace]
             )
             for metric_name, metric_mean in metrics.items():
                 print(metric_name, metric_mean)
 
     else:
-        # ===== INIT DATASET
-        train_cfg = cfg["train_data_loader"]
-        train_zarr = ChunkedDataset(dm.require(train_cfg["key"])).open()
-        train_dataset = AgentDataset(
-            cfg,
-            train_zarr,
-            rasterizer,
-            min_frame_history=MIN_FRAME_HISTORY,
-            min_frame_future=MIN_FRAME_FUTURE,
-        )
-
-        val_cfg = cfg["val_data_loader"]
-        val_zarr = ChunkedDataset(dm.require(val_cfg["key"])).open()
-        val_dataset = AgentDataset(
-            cfg,
-            val_zarr,
-            rasterizer,
-            min_frame_history=MIN_FRAME_HISTORY,
-            min_frame_future=MIN_FRAME_FUTURE,
-        )
-        print(train_dataset)
-        print(val_dataset)
-
-        print("Ploting dataset")
-        PLOT_NUM = 10
-        ind = np.random.randint(0, len(train_dataset), size=PLOT_NUM)
-        for i in range(PLOT_NUM):
-            data = train_dataset[ind[i]]
-            im = data["image"].transpose(1, 2, 0)
-            im = train_dataset.rasterizer.to_rgb(im)
-            target_positions_pixels = transform_points(
-                data["target_positions"], data["raster_from_agent"]
-            )
-            draw_trajectory(
-                im,
-                target_positions_pixels,
-                TARGET_POINTS_COLOR,
-                yaws=data["target_yaws"],
-            )
-            plt.imshow(im[::-1])
-            if DEBUG:
-                plt.show()
-
-        if args.downsample_train:
-            print("downsampling train agents, using only 4 frames from each scene")
-            train_agents_list = lyft_utils.downsample_agents(
-                train_zarr,
-                train_dataset,
-                selected_frames=lyft_utils.TRAIN_DSAMPLE_FRAMES,
-            )
-            train_dataset = torch.utils.data.Subset(train_dataset, train_agents_list)
-
-        train_dataloader = DataLoader(
-            train_dataset,
-            shuffle=True,
-            batch_size=args.batch_size,
-            num_workers=args.num_workers,
-        )
-
-        # downsampling the validation dataset same as test dataset or
-        # l5kit.evaluation.create_chopped_dataset
-        val_agents_list = lyft_utils.downsample_agents(
-            val_zarr, val_dataset, selected_frames=VAL_SELECTED_FRAME
-        )
-        val_dataset = torch.utils.data.Subset(val_dataset, val_agents_list)
-        val_dataloader = DataLoader(
-            val_dataset,
-            shuffle=False,
-            batch_size=args.batch_size,
-            num_workers=args.num_workers,
-        )
+        print("\t\t ==== TRAIN MODE ====")
         print(
-            f"training samples: {len(train_dataset)}, valid samples: {len(val_dataset)}"
+            "training samples: {}, valid samples: {}".format(
+                len(mpred_dm.train_dataset), len(mpred_dm.val_dataset)
+            )
         )
-
-        total_steps = args.epochs * len(train_dataset) // args.batch_size
+        total_steps = args.epochs * len(mpred_dm.train_dataset) // args.batch_size
         val_check_interval = VAL_INTERVAL_SAMPLES // args.batch_size
 
-        model = LyftMpredModel(
+        model = LitModel(
             cfg,
             lr=args.lr,
             backbone_name=args.backbone_name,
@@ -313,7 +371,7 @@ def main(cfg: dict, args: argparse.Namespace) -> None:
             optim_name=args.optim_name,
             ba_size=args.batch_size,
             epochs=args.epochs,
-            data_size=len(train_dataset),
+            data_size=len(mpred_dm.train_dataset),
             total_steps=total_steps,
         )
 
@@ -324,12 +382,11 @@ def main(cfg: dict, args: argparse.Namespace) -> None:
             verbose=True,
         )
         pl.trainer.seed_everything(seed=SEED)
-        precision = 16
         trainer = pl.Trainer(
             gpus=len(args.visible_gpus.split(",")),
             max_steps=total_steps,
             val_check_interval=val_check_interval,
-            precision=precision,
+            precision=args.precision,
             benchmark=True,
             deterministic=False,
             checkpoint_callback=checkpoint_callback,
@@ -337,13 +394,15 @@ def main(cfg: dict, args: argparse.Namespace) -> None:
 
         # Run lr finder
         if args.find_lr:
-            lr_finder = trainer.tuner.lr_find(model, train_dataloader, num_training=500)
+            lr_finder = trainer.tuner.lr_find(
+                model, datamodule=mpred_dm, num_training=500
+            )
             lr_finder.plot(suggest=True)
             plt.show()
             sys.exit()
 
         # Run Training
-        trainer.fit(model, train_dataloader, val_dataloader)
+        trainer.fit(model, datamodule=mpred_dm)
 
 
 if __name__ == "__main__":
@@ -394,6 +453,13 @@ much faster than using all data, but it will get larger loss",
         help="path for model checkpoint at test mode",
     )
     parser.add_argument(
+        "--precision",
+        default=16,
+        choices=[16, 32],
+        type=int,
+        help="float precision at training",
+    )
+    parser.add_argument(
         "--visible_gpus",
         type=str,
         default="0",
@@ -416,13 +482,13 @@ much faster than using all data, but it will get larger loss",
 
     if args.is_debug:
         DEBUG = True
-        print("\t ---- DEBUG RUN")
+        print("\t ---- DEBUG RUN ---- ")
         cfg["train_data_loader"]["key"] = "scenes/sample.zarr"
         cfg["val_data_loader"]["key"] = "scenes/sample.zarr"
         VAL_INTERVAL_SAMPLES = 5000
         args.batch_size = 16
     else:
         DEBUG = False
-        print("\t ---- NORMAL RUN")
+        print("\t ---- NORMAL RUN ---- ")
     lyft_utils.print_argparse_arguments(args)
     main(cfg, args)
