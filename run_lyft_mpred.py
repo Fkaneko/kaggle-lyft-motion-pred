@@ -64,9 +64,10 @@ class LyftMpredDatamodule(pl.LightningDataModule):
     def prepare_data(self):
         # called only on 1 GPU
         self.dm = LocalDataManager(None)
-        self.rasterizer = build_rasterizer(cfg, self.dm)
 
     def setup(self):
+        self.rasterizer = build_rasterizer(self.cfg, self.dm)
+
         # called on every GPU
         if self.is_test:
             print("test mode setup")

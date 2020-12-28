@@ -105,6 +105,13 @@ You can check [11.377 result with my full test pipeline and trained weight at ka
 **[Note]** The backbone difference is not a matter, within top-10 solution a single resnet18 reaches score < 10.0.
 But smaller model tends to be better for this task.
 
+### Prediction Visualization
+Prediction visualization with this study model. The left most figure is ground truth track is displayed and remaining three images are 3-mode predictions. The loss is over three modes.
+A intersecetion scene with a trafic light is hard as expected.
+![pred image 0](./images/pred_image_example_0.png)
+![pred image 1](./images/pred_image_example_1.png)
+
+
 ## License
 #### Code
 Apache 2.0

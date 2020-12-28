@@ -129,5 +129,9 @@ dmypy.json
 .pyre/
 
 
-# vim
+# vim, vscode
+.vscode/
 *~
+
+# pytorch lightning log
+.lightning_logs/
