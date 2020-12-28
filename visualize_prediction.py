@@ -67,7 +67,7 @@ def visualize_prediction(
 
             # ploting
             for ba_ind in range(len(pred)):
-                _, axarr = plt.subplots(1, 4, figsize=(15, 15 * 4))
+                _, axarr = plt.subplots(1, 4, figsize=(5 * 4, 5))
                 # input image
                 im = images[ba_ind].transpose(1, 2, 0)
                 im = rasterizer.to_rgb(im)
